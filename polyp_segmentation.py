@@ -119,7 +119,6 @@ class SwinENet(nn.Module):
             nn.ConvTranspose2d(256, 128, 2, stride=2),
             nn.ConvTranspose2d(128, 64, 2, stride=2)
         ])
-        # MFAB for skip connections (use first three stages)
         self.mfab = MFAB([fused_channels[0], fused_channels[1], fused_channels[2]], 64)
         self.final_conv = nn.Conv2d(64, num_classes, 1)
 
@@ -127,17 +126,14 @@ class SwinENet(nn.Module):
         swin_feats = self.swin(x)
         effnet_feats = self.effnet(x)
 
-        # Permute if necessary (adjusting for timm feature output format)
         # Ensure features are in [B, C, H, W] format
         swin_feats_processed = []
         for f, ch in zip(swin_feats, self.swin.feature_info.channels()[:self.num_stages]):
-             # Check if feature is from a layer that might output in [B, H*W, C] format
             if f.ndim == 3: # Assuming [B, H*W, C]
                 B, HW, C = f.shape
                 H = W = int(HW**0.5) # Assuming square features
                 swin_feats_processed.append(f.view(B, H, W, C).permute(0, 3, 1, 2)) # Reshape and permute to [B, C, H, W]
             elif f.ndim == 4: # Assuming [B, C, H, W] or [B, H, W, C]
-                 # Check if channel dim seems to be the last one and should be second
                 if f.shape[-1] == ch and f.shape[1] != ch: # Likely [B, H, W, C], permute to [B, C, H, W]
                     swin_feats_processed.append(f.permute(0, 3, 1, 2))
                 else: # Assume [B, C, H, W] already
@@ -150,7 +146,6 @@ class SwinENet(nn.Module):
         for f, ch in zip(effnet_feats, self.effnet.feature_info.channels()[:self.num_stages]):
              # EfficientNet features from timm usually come in [B, C, H, W]
             if f.ndim == 4: # Assuming [B, C, H, W] or [B, H, W, C]
-                 # Check if channel dim seems to be the last one and should be second
                 if f.shape[-1] == ch and f.shape[1] != ch: # Likely [B, H, W, C], permute to [B, C, H, W]
                     effnet_feats_processed.append(f.permute(0, 3, 1, 2))
                 else: # Assume [B, C, H, W] already
@@ -160,20 +155,17 @@ class SwinENet(nn.Module):
                  raise ValueError(f"Unexpected EfficientNet feature tensor shape: {f.shape}")
 
 
-        # Fuse features at each scale after potentially resizing EfficientNet features
+        # Fusing features at each scale after resizing EfficientNet features
         fused_feats = []
         for swin_f, effnet_f in zip(swin_feats_processed, effnet_feats_processed):
-            # Check if spatial dimensions match
+            # Checking spatial dimensions match
             if swin_f.shape[2:] != effnet_f.shape[2:]:
-                # If not, resize the EfficientNet feature to match the Swin feature size
-                # Using 'bilinear' or 'nearest' for resizing feature maps is common.
-                # 'bicubic' might be too slow or introduce artifacts for features.
-                # Let's choose bilinear as a general option.
+                # Resize EfficientNet features
                 target_size = swin_f.shape[2:]
                 effnet_f_resized = F.interpolate(effnet_f, size=target_size, mode='bilinear', align_corners=False)
                 fused_feats.append(torch.cat([swin_f, effnet_f_resized], dim=1))
             else:
-                # If dimensions match, just concatenate
+                # If dimensions match, concatenate
                 fused_feats.append(torch.cat([swin_f, effnet_f], dim=1))
 
         # MDCB enhancement
@@ -185,10 +177,7 @@ class SwinENet(nn.Module):
             x = dec(x)
 
         # MFAB aggregation
-        # Check if mfab_inputs have matching spatial dimensions before passing to MFAB
-        # MFAB expects features[0] as the target size.
-        # Let's resize features[1] and features[2] to match features[0].shape[2:]
-        mfab_inputs = [feats[0]] # feats[0] is the first stage feature
+        mfab_inputs = [feats[0]]
         # Resize feats[1] to match feats[0]
         if feats[1].shape[2:] != feats[0].shape[2:]:
              resized_feat1 = F.interpolate(feats[1], size=feats[0].shape[2:], mode='bilinear', align_corners=False)
@@ -236,8 +225,9 @@ dataset = KvasirSegDataset(
 loader = DataLoader(dataset, batch_size=8, shuffle=True)
 
 # 6. Model instantiation
+
 model = SwinENet(num_classes=1)
-# Move the model to the GPU
+
 model.cuda()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 criterion = torch.nn.BCEWithLogitsLoss()
@@ -280,15 +270,13 @@ total_saved_count = 0
 
 with torch.no_grad():
     for i, (images, masks) in enumerate(loader):
-        # Move images to the GPU before passing to the model
-        images = images.cuda() # Add this line
+        images = images.cuda()
         preds = model(images)
 
         # Applying sigmoid and threshold to get binary masks
         predicted_masks = torch.sigmoid(preds) > 0.5
 
         for j in range(images.size(0)):
-            # Remove batch and channel dimensions
             mask_img = predicted_masks[j].squeeze(0).byte().cpu() * 255
             mask_pil = Image.fromarray(mask_img.numpy(), mode='L')
 
@@ -298,7 +286,6 @@ with torch.no_grad():
             mask_pil.save(mask_filepath)
             print(f"Saved predicted mask to {mask_filepath}")
 
-            # Increment the total saved count
             total_saved_count += 1
 
 print(f"Finished saving {total_saved_count} predicted masks.")
@@ -325,8 +312,7 @@ if os.path.exists(model_save_path):
 else:
     print(f"Model state dict not found at {model_save_path}. Cannot evaluate.")
 
-# Move the model to the GPU before evaluation
-model.cuda() # Ensure the model is on the GPU for evaluation too
+model.cuda()
 
 model.eval()
 
@@ -347,9 +333,8 @@ with torch.no_grad():
 
     for i, (images, masks) in enumerate(loader):
 
-        # Move images to the GPU before passing to the model
-        images = images.cuda() # Moved this line up
-        masks = masks.cuda()   # Also move masks to GPU for metrics if needed
+        images = images.cuda()
+        masks = masks.cuda()
 
         # Debugging 1.100
         # The debugging prints were causing issues because 'preds' was not defined yet
@@ -371,12 +356,11 @@ with torch.no_grad():
         metric_dice.update(predicted_masks_binary, masks_binary)
         metric_accuracy.update(predicted_masks_binary, masks_binary)
 
-# Compute the final metric values
 final_iou = metric_iou.compute()
 final_dice = metric_dice.compute()
 final_accuracy = metric_accuracy.compute()
 
-print(f"Evaluation Metrics over the entire dataset:")
+print(f"Evaluation Metrics over the entire Kvasir dataset:")
 print(f"  Mean IoU: {final_iou.item():.4f}")
 print(f"  Mean Dice: {final_dice.item():.4f}")
 print(f"  Overall Accuracy: {final_accuracy.item():.4f}")
