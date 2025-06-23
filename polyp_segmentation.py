@@ -11,6 +11,8 @@ Original file is located at
 
 !unzip kvasir-seg.zip
 
+!pip install --upgrade torchmetrics
+
 import os
 from PIL import Image
 import torch
@@ -20,9 +22,9 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as T
 import timm
 
-# ---- Dataset ----
+# 1. Dataset
 class KvasirSegDataset(Dataset):
-    def __init__(self, images_dir, masks_dir, transform=None, mask_transform=None, mask_extension='.png'):
+    def __init__(self, images_dir, masks_dir, transform=None, mask_transform=None, mask_extension='.jpg'):
         self.images_dir = images_dir
         self.masks_dir = masks_dir
         self.transform = transform
@@ -55,7 +57,7 @@ class KvasirSegDataset(Dataset):
         mask = (mask > 0).float()  # Binarize
         return image, mask
 
-# ---- Model Blocks ----
+# 2. Model Blocks
 class MDCB(nn.Module):
     def __init__(self, in_ch, out_ch, dilations=[1, 2, 4]):
         super().__init__()
@@ -86,7 +88,7 @@ class MFAB(nn.Module):
         x = torch.cat(resized_features, dim=1)
         return self.conv(x)
 
-# ---- SwinE-Net Model ----
+# 3. SwinE-Net Model
 class SwinENet(nn.Module):
     def __init__(self, num_classes=1,
                  swin_backbone='swin_base_patch4_window7_224',
@@ -212,7 +214,7 @@ class SwinENet(nn.Module):
 
         return x
 
-# Transforms
+# 4. Transforms
 image_transform = T.Compose([
     T.Resize((224, 224)),
     T.ToTensor(),
@@ -223,132 +225,75 @@ mask_transform = T.Compose([
     T.ToTensor()
 ])
 
-# Dataset/Dataloader
+# 5. Dataset/Dataloader
 dataset = KvasirSegDataset(
     images_dir='/content/Kvasir-SEG/images',
     masks_dir='/content/Kvasir-SEG/masks',
     transform=image_transform,
     mask_transform=mask_transform,
-    mask_extension='.jpg'  # or whatever your mask files use
+    mask_extension='.jpg'
 )
 loader = DataLoader(dataset, batch_size=8, shuffle=True)
 
-# Model instantiation
+# 6. Model instantiation
 model = SwinENet(num_classes=1)
-# Example forward pass
-for images, masks in loader:
-    preds = model(images)
-    print(preds.shape)  # Should be [B, 1, 224, 224]
-    break
-
-import os
-from PIL import Image
-import torch
-from torch.utils.data import Dataset
-import torchvision.transforms as T
-
-class KvasirSegDataset(Dataset):
-    def __init__(self, images_dir, masks_dir, transform=None, mask_transform=None):
-        self.images_dir = images_dir
-        self.masks_dir = masks_dir
-        self.transform = transform
-        self.mask_transform = mask_transform
-        self.images = sorted(os.listdir(images_dir))
-        self.mask_extension = '.jpg'  # mask file extension
-
-
-    def __len__(self):
-        return len(self.images)
-
-    def __getitem__(self, idx):
-        img_name = self.images[idx]
-        img_path = os.path.join(self.images_dir, img_name)
-        base_name = os.path.splitext(img_name)[0] # filename without ext
-        mask_name = base_name + self.mask_extension
-        mask_path = os.path.join(self.masks_dir, mask_name)
-
-        image = Image.open(img_path).convert("RGB")
-        mask = Image.open(mask_path).convert("L")  # grayscale mask
-
-        if self.transform:
-            image = self.transform(image)
-        if self.mask_transform:
-            mask = self.mask_transform(mask)
-        else:
-            mask = T.ToTensor()(mask)
-            # For binary segmentation, ensure mask is 0/1
-            mask = (mask > 0).float()
-        return image, mask
-
-from torch.utils.data import DataLoader
-import torchvision.transforms as T
-
-image_transform = T.Compose([
-    T.Resize((224, 224)),
-    T.ToTensor(),
-    T.Normalize([0.485,0.456,0.406], [0.229,0.224,0.225])
-])
-
-mask_transform = T.Compose([
-    T.Resize((224,224)),
-    T.ToTensor()
-])
-
-dataset = KvasirSegDataset(
-    images_dir='/content/Kvasir-SEG/images',
-    masks_dir='/content/Kvasir-SEG/masks',
-    transform=image_transform,
-    mask_transform=mask_transform
-)
-
-loader = DataLoader(dataset, batch_size=8, shuffle=True)
-
-import torch
-
-model = SwinENet(num_classes=1)
+# Move the model to the GPU
+model.cuda()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-criterion = torch.nn.BCEWithLogitsLoss()  # or Dice Loss
+criterion = torch.nn.BCEWithLogitsLoss()
 
-for images, masks in loader:
-    preds = model(images)
-    loss = criterion(preds, masks)
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+# 7. Training model
 
-# Save the trained model
+num_epochs = 6 # Number of training epochs
+
+for epoch in range(num_epochs):
+    model.train()
+    running_loss = 0.0
+    for i, (images, masks) in enumerate(loader):
+        images = images.cuda()
+        masks = masks.cuda()
+
+        optimizer.zero_grad()
+        preds = model(images)
+
+        loss = criterion(preds, masks)
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item() * images.size(0)
+
+    epoch_loss = running_loss / len(dataset)
+    print(f"Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.4f}")
+
+# 8. Saving the model
 model_save_path = '/content/swinenet_kvasir_seg.pth'
 torch.save(model.state_dict(), model_save_path)
 print(f"Model saved to {model_save_path}")
 
-# --- Code to save prediction masks for all examples ---
-model.eval() # Set model to evaluation mode
+# 9. Save prediction masks
+model.eval()
 output_masks_dir = '/content/predicted_masks'
-os.makedirs(output_masks_dir, exist_ok=True) # Create directory if it doesn't exist
 
-# Removed num_examples_to_save and related batch calculation
-# The code will now iterate through all batches in the loader
+os.makedirs(output_masks_dir, exist_ok=True)
 
-# Initialize a counter for the total number of masks saved
 total_saved_count = 0
 
-with torch.no_grad(): # Disable gradient calculation for inference
-    # Iterate through ALL batches in the loader
+with torch.no_grad():
     for i, (images, masks) in enumerate(loader):
+        # Move images to the GPU before passing to the model
+        images = images.cuda() # Add this line
         preds = model(images)
 
-        # Apply sigmoid and threshold to get binary masks (assuming BCEWithLogitsLoss was used)
+        # Applying sigmoid and threshold to get binary masks
         predicted_masks = torch.sigmoid(preds) > 0.5
 
-        # Iterate over each example in the current batch
         for j in range(images.size(0)):
-            # Convert the predicted mask to a PIL Image
-            # Squeeze to remove batch and channel dimensions, convert to uint8
-            mask_img = predicted_masks[j].squeeze(0).byte().cpu() * 255 # Convert to 0-255 for saving
-            mask_pil = Image.fromarray(mask_img.numpy(), mode='L') # 'L' for grayscale
+            # Remove batch and channel dimensions
+            mask_img = predicted_masks[j].squeeze(0).byte().cpu() * 255
+            mask_pil = Image.fromarray(mask_img.numpy(), mode='L')
 
-            # Save the predicted mask using the global counter for filename index
-            mask_filename = f"predicted_mask_{total_saved_count:04d}.png" # e.g., predicted_mask_0000.png
+            # Saving the predicted mask using the global counter for filename index
+            mask_filename = f"predicted_mask_{total_saved_count:04d}.jpg"
             mask_filepath = os.path.join(output_masks_dir, mask_filename)
             mask_pil.save(mask_filepath)
             print(f"Saved predicted mask to {mask_filepath}")
@@ -358,120 +303,70 @@ with torch.no_grad(): # Disable gradient calculation for inference
 
 print(f"Finished saving {total_saved_count} predicted masks.")
 
-!pip install --upgrade torchmetrics
+# 10. Printing predictions
 
-# Install torchmetrics if not already installed, and upgrade to ensure latest version
-# Re-run this command to ensure torchmetrics is up-to-date
-
-
-import torch
 import torchmetrics
-# Import Dice specifically from torchmetrics
-from torchmetrics.segmentation import DiceScore # Import Dice directly from torchmetrics
-import os
-from PIL import Image
-from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms as T
-import torch.nn.functional as F
-import timm
-import torch.nn as nn
-import torchmetrics # Keep this if you use torchmetrics.JaccardIndex etc. directly
+from torchmetrics.segmentation import DiceScore
 
-# Re-define model and classes if running in a fresh environment, otherwise skip
-# Assuming the model definition, dataset, and loader are already defined as before
-
-# Load the trained model state dictionary
-# The model definition and loader instantiation should be run *before* this cell
-# if you are restarting the notebook or running cells out of order.
-# For a sequential run, they are already defined in previous cells.
 try:
-    model # Check if model exists
+    model
 except NameError:
-    # If model is not defined (e.g., running this cell first), instantiate it
     print("Model not found, instantiating SwinENet.")
-    # Assuming SwinENet class is defined in a previous cell or imported
-    # If it's not defined yet, uncomment and potentially copy its definition here
-    # from your model definition cell:
-    # class SwinENet(...): ...
     model = SwinENet(num_classes=1)
 
 model_save_path = '/content/swinenet_kvasir_seg.pth'
 if os.path.exists(model_save_path):
     try:
-        # Ensure the model is on the correct device before loading state_dict if using GPU
-        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # model.to(device)
         model.load_state_dict(torch.load(model_save_path))
         print(f"Loaded model from {model_save_path}")
     except RuntimeError as e:
         print(f"Error loading model state_dict: {e}")
         print("This might happen if the model architecture definition has changed or device mismatch.")
-        # Handle error, e.g., continue without loading or raise the exception
-        # raise e # Uncomment to stop execution on load error
 else:
     print(f"Model state dict not found at {model_save_path}. Cannot evaluate.")
-    # Decide how to proceed: train a new model, skip evaluation, etc.
-    # For this example, we'll print a warning and continue (model will be untrained)
 
-model.eval() # Set model to evaluation mode
+# Move the model to the GPU before evaluation
+model.cuda() # Ensure the model is on the GPU for evaluation too
 
-# Define the metrics to calculate
-# Use 'binary' for binary segmentation (1 class + background)
-# torchmetrics.Dice is the correct class name for the binary Dice metric in recent versions
-# The error "AttributeError: module 'torchmetrics' has no attribute 'Dice'"
-# strongly suggests an issue with the torchmetrics installation or version.
-# Re-running the pip install command and ensuring the kernel is refreshed
-# is the primary fix. The line below is correct for recent torchmetrics versions.
-metric_iou = torchmetrics.JaccardIndex(task="binary")
-# The problematic line, now corrected:
-metric_dice = DiceScore(num_classes=2) # Now imported directly from torchmetrics
-metric_accuracy = torchmetrics.Accuracy(task="binary")
+model.eval()
+
+# Move metric objects to the GPU
+metric_iou = torchmetrics.JaccardIndex(task="binary").cuda()
+metric_dice = DiceScore(num_classes=2).cuda()
+metric_accuracy = torchmetrics.Accuracy(task="binary").cuda()
+
 
 print("\nCalculating evaluation metrics...")
 
-# Disable gradient calculation for inference
 with torch.no_grad():
-    # Iterate through the data loader
-    # Ensure the loader is instantiated from a previous cell
     try:
-        loader # Check if loader exists
+        loader
     except NameError:
         print("DataLoader not found. Please run the cell that defines the dataset and loader.")
-        # You might want to re-create the loader here if necessary
-        # Example (assuming dataset and transforms are defined):
-        # dataset = KvasirSegDataset(...) # Make sure KvasirSegDataset is defined/imported
-        # image_transform = T.Compose([...]) # Make sure transforms are defined
-        # mask_transform = T.Compose([...]) # Make sure transforms are defined
-        # loader = DataLoader(dataset, batch_size=8, shuffle=True)
-        # If you cannot re-create, you might need to stop execution
-        exit() # Stop execution if loader is critical
+        exit()
 
     for i, (images, masks) in enumerate(loader):
-        # Assuming loader outputs images and ground truth masks
 
-        # Move data to the same device as the model (optional, but good practice if using GPU)
-        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # images = images.to(device)
-        # masks = masks.to(device)
-        # model.to(device) # Ensure model is on the device
-        # # Metrics also need to be on the same device
-        # metric_iou.to(device)
-        # metric_dice.to(device)
-        # metric_accuracy.to(device)
+        # Move images to the GPU before passing to the model
+        images = images.cuda() # Moved this line up
+        masks = masks.cuda()   # Also move masks to GPU for metrics if needed
 
+        # Debugging 1.100
+        # The debugging prints were causing issues because 'preds' was not defined yet
+        # before the model call. Let's get the predictions first.
         preds = model(images)
 
-        # Apply sigmoid to predictions and threshold to get binary masks (0 or 1)
-        # Ensure predictions and masks are on the same device and dtype for metric calculation
-        predicted_masks_binary = (torch.sigmoid(preds) > 0.5).int() # Convert boolean to integer (0 or 1)
+        print(f"Batch {i}:")
+        print(f"  Raw predictions shape: {preds.shape}")
+        print(f"  Raw predictions min: {preds.min().item()}, max: {preds.max().item()}")
+        sigmoid_preds = torch.sigmoid(preds)
+        print(f"  Sigmoid predictions min: {sigmoid_preds.min().item()}, max: {sigmoid_preds.max().item()}")
+        # End Debugging 1.100
 
-        # Update metrics with the current batch
-        # Predicted masks should be int (0 or 1) and ground truth masks float or int
-        # JaccardIndex and Dice expect inputs to be the same size
-        # Ensure ground truth mask is also int (0 or 1) if needed by metric (ToTensor already makes it float)
-        # Let's ensure the target is also binary int for clarity
+        predicted_masks_binary = (torch.sigmoid(preds) > 0.5).int()  # Convert to binary masks
         masks_binary = (masks > 0).int()
 
+        # Pass GPU tensors to the GPU metric objects
         metric_iou.update(predicted_masks_binary, masks_binary)
         metric_dice.update(predicted_masks_binary, masks_binary)
         metric_accuracy.update(predicted_masks_binary, masks_binary)
@@ -481,13 +376,11 @@ final_iou = metric_iou.compute()
 final_dice = metric_dice.compute()
 final_accuracy = metric_accuracy.compute()
 
-# Print the metrics
 print(f"Evaluation Metrics over the entire dataset:")
 print(f"  Mean IoU: {final_iou.item():.4f}")
 print(f"  Mean Dice: {final_dice.item():.4f}")
 print(f"  Overall Accuracy: {final_accuracy.item():.4f}")
 
-# Reset metrics for potential future use (optional)
 metric_iou.reset()
 metric_dice.reset()
 metric_accuracy.reset()
@@ -495,4 +388,4 @@ metric_accuracy.reset()
 !zip -r /content/predicted_masks.zip /content/predicted_masks
 
 from google.colab import files
-files.download("/content/predicted_masks")
+files.download("/content/predicted_masks.zip")
