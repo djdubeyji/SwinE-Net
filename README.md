@@ -40,7 +40,6 @@ Supervisor: **Prof. Karl Rohr**
 ## Directory Structure
 
 ```
-├── data/                    # Data folders (raw, processed images and masks)
 ├── polyp_segmentation.ipynb # Main model and training notebook
 ├── predicted_masks.zip      # Main model and training notebook
 ├── results/                 # Output results and visualizations
