@@ -73,12 +73,7 @@ You can easily run and experiment with this project on [Google Colab](https://co
     %cd SwinE-Net
     ```
 
-3. **Install Dependencies:**
-    ```python
-    !pip install -r requirements.txt
-    ```
-
-4. **Prepare Data:**
+3. **Prepare Data:**
     - Upload your images and masks to the Colab environment, ideally into a `data/` folder.
     - You can use `files.upload()` or mount Google Drive for larger datasets:
       ```python
@@ -86,15 +81,13 @@ You can easily run and experiment with this project on [Google Colab](https://co
       drive.mount('/content/drive')
       # Then copy/move your data as needed
       ```
+    - Also, the code facilitates the download of the dataset automatically, only kaggle api key is required,
 
 5. **Train the Model:**
-    ```python
-    !python polyp_segmentation.py
-    ```
-    - Training and validation will run, and model checkpoints will be saved in the `checkpoints/` folder.
+    - Run the collab cells one by one.
 
-6. **Download Results:**
-    - After training, you can download predicted masks, results, or model checkpoints using Colab's file browser or:
+7. **Download Results:**
+    - After training, you can download predicted masks, results, or model using Colab's file browser or:
       ```python
       from google.colab import files
       files.download('path/to/your/file')
