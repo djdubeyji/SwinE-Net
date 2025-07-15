@@ -40,13 +40,11 @@ Supervisor: **Prof. Karl Rohr**
 ## Directory Structure
 
 ```
-├── data/                # Data folders (raw, processed images and masks)
-├── polyp_segmentation.py# Main model and training script
-├── utils/               # Utility functions and scripts
-├── checkpoints/         # Saved checkpoints and models
-├── results/             # Output results and visualizations
-├── requirements.txt     # Python dependencies
-├── README.md            # This file
+├── data/                    # Data folders (raw, processed images and masks)
+├── polyp_segmentation.ipynb # Main model and training notebook
+├── predicted_masks.zip      # Main model and training notebook
+├── results/                 # Output results and visualizations
+├── README.md                # This file
 ```
 
 ---
@@ -58,24 +56,52 @@ Supervisor: **Prof. Karl Rohr**
 - **timm** (for model backbones)
 - **albumentations**, **Pillow**, **numpy**, **scikit-learn**, **torchmetrics**
 
-Install all dependencies via:
-```bash
-pip install -r requirements.txt
-```
-
 ---
 
-## How to Run
+## How to Run (Google Colab)
 
-1. **Prepare Data:**
-   - Place your images and masks in the `data/` directory (see [Data Preparation](#data-preparation)).
-2. **Train the model:**
-   ```bash
-   python polyp_segmentation.py
-   ```
-   - Training/validation splits are handled automatically. Model checkpoints will be saved in `checkpoints/`.
-3. **Evaluate or predict:**
-   - Use the saved models to generate segmentation masks or evaluate on new data.
+You can easily run and experiment with this project on [Google Colab](https://colab.research.google.com/), which provides free GPU resources and a convenient Jupyter notebook interface.
+
+**Steps:**
+
+1. **Open the Google Colab Notebook:**
+    - You can upload your own notebook or use our template by clicking [here](https://colab.research.google.com/) and uploading the provided notebook, or by cloning this repository and opening a notebook in Colab.
+    - Alternatively, click the "Open in Colab" badge if available.
+
+2. **Clone the Repository:**
+    ```python
+    !git clone https://github.com/djdubeyji/SwinE-Net.git
+    %cd SwinE-Net
+    ```
+
+3. **Install Dependencies:**
+    ```python
+    !pip install -r requirements.txt
+    ```
+
+4. **Prepare Data:**
+    - Upload your images and masks to the Colab environment, ideally into a `data/` folder.
+    - You can use `files.upload()` or mount Google Drive for larger datasets:
+      ```python
+      from google.colab import drive
+      drive.mount('/content/drive')
+      # Then copy/move your data as needed
+      ```
+
+5. **Train the Model:**
+    ```python
+    !python polyp_segmentation.py
+    ```
+    - Training and validation will run, and model checkpoints will be saved in the `checkpoints/` folder.
+
+6. **Download Results:**
+    - After training, you can download predicted masks, results, or model checkpoints using Colab's file browser or:
+      ```python
+      from google.colab import files
+      files.download('path/to/your/file')
+      ```
+
+**Tip:** You can edit, visualize, and experiment interactively in Colab by converting the Python script to a notebook or by creating your own analysis cells.
 
 ---
 
@@ -100,13 +126,12 @@ pip install -r requirements.txt
 
 ## Results
 
-| Metric       | Kvasir-SEG | ClinicDB | ... (add more) |
-|--------------|------------|----------|----------------|
-| Mean IoU     |            |          |                |
-| Mean Dice    |            |          |                |
-| Accuracy     |            |          |                |
+| Metric       | Kvasir-SEG | ClinicDB |
+|--------------|------------|----------|
+| Mean IoU     |   0.928    |  0.907   |
+| Mean Dice    |   0.866    |  0.830   |
+| Accuracy     |   0.976    |  0.982   |
 
-> _Add your experiment results here, and provide explanation/interpretation as needed._
 
 ---
 
@@ -128,7 +153,7 @@ In the final phase, we analyzed our experimental results in depth, identifying s
 
 ## References
 
-- Park, K.-B., & Lee, J. Y. (2023). SwinE-Net: Hybrid deep-learning approach to novel polyp segmentation using convolutional neural network and Swin Transformer. *[Journal Reference/Link]*
+- Park, K.-B., & Lee, J. Y. (2023). SwinE-Net: Hybrid deep-learning approach to novel polyp segmentation using convolutional neural network and Swin Transformer.
 - [Swin Transformer (official repo)](https://github.com/microsoft/Swin-Transformer)
 - [EfficientNet (official repo)](https://github.com/lukemelas/EfficientNet-PyTorch)
 
