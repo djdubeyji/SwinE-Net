@@ -28,10 +28,10 @@ SwinE-Net is a hybrid segmentation model that combines the strengths of transfor
 
 ## Project Team
 
-| Name              | Email                    |
-|-------------------|-------------------------|
-| Pranjal Sharma    | pranjaldub@gmail.com    |
-| Hanisha Kasaraneni| kasaranenih@gmail.com   |
+| Name              | Email                              |
+|-------------------|------------------------------------|
+| Pranjal Sharma    | pranjaldub [at] gmail [dot] com    |
+| Hanisha Kasaraneni| kasaranenih [at] gmail [dot] com   |
 
 Supervisor: **Prof. Karl Rohr**
 
