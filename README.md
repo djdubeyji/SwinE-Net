@@ -158,3 +158,6 @@ Special thanks to Prof. Karl Rohr for supervision and guidance.
 ---
 
 **For questions or issues, please open an issue on this repository.**
+
+![GIT QR](qrcode_github.com.png)
+
